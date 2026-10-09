@@ -1,5 +1,7 @@
 # Custom fork draft and Mac test guide
 
+**First-time Mac user? Start with the [Swedish step-by-step test guide](TESTGUIDE-SV.md).** It covers installations, retrieving the correct branch, copyable commands, expected results, synthetic test data and troubleshooting. This page remains the technical implementation and validation reference.
+
 This draft implements the handoff in `handoff/` on `iAmYoel/meeting-transcriber`, baseline commit `a4f6af6df2674bc4e18097084a128af469823fab`. The draft was prepared and validated in the cloud checkout for review in the user's fork. No deployment, application release, or change to a user's Mac or Obsidian vault has been performed.
 
 The main app has **not been built or executed** in this Linux environment. This is a code draft for macOS validation, not a verified application release.
