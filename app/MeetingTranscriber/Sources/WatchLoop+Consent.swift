@@ -3,17 +3,9 @@ import os.log
 
 private let logger = Logger(subsystem: AppPaths.logSubsystem, category: "WatchLoopConsent")
 
-/// Browser-meeting recording-consent gate (issue #503), split out of `WatchLoop`
-/// to keep its body under the line-length cap. Only patterns with
-/// `requiresRecordingConsent` reach it; native meetings auto-start unchanged.
-///
-/// The answer is awaited in its own task rather than inline in the poll loop
-/// (issue #543). Inline, `detector.checkOnce()` was not called at all while a
-/// prompt was open — up to `NotificationManager.consentPromptTimeout` of not
-/// looking, during which a Teams or Zoom call that needs no consent went
-/// unnoticed. Google Meet raises the same WebRTC assertion on a page you cannot
-/// even join, so a stale link was enough to freeze native detection for a
-/// minute.
+/// Shared gate for native Ask mode and browser meetings. Await the user's answer
+/// in a separate task so polling continues while the question is visible.
+/// Unavailable notifications keep explicit Record/Ignore actions in the menu bar.
 extension WatchLoop {
     /// Whether this meeting has to wait for the user instead of recording now.
     /// Returns immediately in every case.
@@ -22,7 +14,15 @@ extension WatchLoop {
     /// decline still suppresses the question" — both reasons to skip the
     /// meeting, neither a reason to ask again.
     func requestConsentIfNeeded(for meeting: DetectedMeeting) -> Bool {
-        guard meeting.pattern.requiresRecordingConsent else { return false }
+        guard recordingStartPolicy() != .manualOnly else { return true }
+        guard recordingStartPolicy().requiresConsent(forBrowser: meeting.pattern.requiresRecordingConsent) else {
+            return false
+        }
+        let identity = meeting.pattern.appName
+        if let ignored = ignoredConsentMeetings[identity] {
+            if detector.isMeetingActive(ignored) { return true }
+            ignoredConsentMeetings.removeValue(forKey: identity)
+        }
         // One question at a time. The WebRTC assertion re-detects the same call
         // every poll, so without this the loop would post a fresh prompt every
         // few seconds while the first one is still on screen.
@@ -36,23 +36,40 @@ extension WatchLoop {
             return true
         }
 
+        let promptID = UUID()
         pendingConsentApp = app
+        consentMeeting = meeting
+        consentPromptID = promptID
         // `app` is already the concrete browser: a browser meeting is carried
         // under the process that held the assertion, so the debounce above and
         // the name below refer to the same one browser. `ownerName` is kept as
         // the source with a fallback because it is the value the detector read
         // straight off the assertion, and an empty identity would otherwise
         // produce a prompt naming nothing at all.
-        let browserName = meeting.ownerName.isEmpty ? app : meeting.ownerName
+        let browserName = meeting.pattern.requiresRecordingConsent && !meeting.ownerName.isEmpty ? meeting.ownerName : app
         consentTask = Task { [weak self] in
             guard let self else { return }
             let answer = await notifier.askToRecord(
-                title: "Record browser meeting?",
+                title: meeting.pattern.requiresRecordingConsent ? "Record browser meeting?" : "Record meeting?",
                 body: "A meeting is active in \(browserName).",
             )
-            finishConsent(for: meeting, answer: answer)
+            finishConsent(for: meeting, promptID: promptID, answer: answer)
         }
         return true
+    }
+
+    func refreshConsentEpisodeState() {
+        ignoredConsentMeetings = ignoredConsentMeetings.filter { detector.isMeetingActive($0.value) }
+        if let meeting = consentMeeting,
+           recordingStartPolicy() == .manualOnly || !detector.isMeetingActive(meeting) {
+            declineParkedConsent()
+        }
+    }
+
+    func answerConsentFromMenu(granted: Bool) {
+        guard let meeting = consentMeeting, let promptID = consentPromptID else { return }
+        _ = notifier.resolveBrowserConsent(granted: granted)
+        finishConsent(for: meeting, promptID: promptID, answer: granted ? .granted : .declined)
     }
 
     /// Take the approved meeting, if any, clearing it. The poll loop is the
@@ -77,8 +94,10 @@ extension WatchLoop {
 
     /// Land the user's answer. Main-actor isolated like the rest of
     /// `WatchLoop`, so it cannot race the poll loop's reads.
-    private func finishConsent(for meeting: DetectedMeeting, answer: ConsentAnswer) {
+    private func finishConsent(for meeting: DetectedMeeting, promptID: UUID, answer: ConsentAnswer) {
         let app = meeting.pattern.appName
+        guard consentPromptID == promptID else { return }
+        guard answer != .unavailable else { return }
         clearConsentState()
 
         guard answer.isGranted else {
@@ -98,7 +117,8 @@ extension WatchLoop {
                 denyListStore.deny(app)
 
             default:
-                consentPolicy.recordDecline(app: app, now: nowProvider())
+                if recordingStartPolicy() == .ask { ignoredConsentMeetings[app] = meeting }
+                else { consentPolicy.recordDecline(app: app, now: nowProvider()) }
             }
             detector.reset(appName: app)
             return
@@ -106,7 +126,7 @@ extension WatchLoop {
         // Minutes can pass between prompt and click, and watching may have been
         // switched off in between — recording then would be recording without
         // having been asked to watch at all.
-        guard isActive else {
+        guard isActive, recordingStartPolicy() != .manualOnly else {
             logger.info("Consent granted for \(app, privacy: .public) after watching stopped — ignoring")
             return
         }

@@ -285,7 +285,7 @@ enum ProtocolError: LocalizedError {
 
         case .emptyProtocol: "Protocol is empty. Tip: Test manually: echo Hello | claude --print"
 
-        case let .httpError(code, body): "HTTP \(code)\(body.isEmpty ? "" : ": \(body)")"
+        case let .httpError(code, _): "HTTP \(code) — model request failed"
 
         case let .connectionFailed(reason): "Connection failed: \(reason)"
 

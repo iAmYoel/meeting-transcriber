@@ -922,6 +922,32 @@ extension PipelineQueue {
     func generateProtocol(
         jobID: UUID, transcript: String, title: String, protocolsDir: URL,
     ) async {
+        if let handler = meetingOutputHandler, let index = jobs.firstIndex(where: { $0.id == jobID }) {
+            if jobs[index].calendarMetadata == nil {
+                jobs[index].calendarMetadata = calendarMetadataProvider?(jobs[index])
+            }
+            saveSnapshot()
+            do {
+                let previous = jobs[index].transcriptPath
+                let receipt = try await handler(jobs[index], transcript)
+                if let current = jobs.firstIndex(where: { $0.id == jobID }) {
+                    jobs[current].protocolPath = receipt.protocolPath
+                    jobs[current].transcriptPath = receipt.transcriptPath
+                    saveSnapshot()
+                    // Remove only our generated duplicate, after verifying the vault copy byte-for-byte.
+                    // Imported source files and audio never enter this cleanup.
+                    if let previous, previous != receipt.transcriptPath,
+                       previous.deletingLastPathComponent() == protocolsDir,
+                       previous.lastPathComponent == (jobs[current].namingSlug ?? "") + ".txt",
+                       (try? Data(contentsOf: receipt.transcriptPath)) == Data(transcript.utf8) {
+                        try? FileManager.default.removeItem(at: previous)
+                    }
+                }
+            } catch {
+                addWarning(id: jobID, "Meeting output failed; raw transcript retained. Retry from Pending summaries or reprocess.")
+            }
+            return
+        }
         guard let protocolGeneratorFactory, let generator = protocolGeneratorFactory() else {
             return
         }

@@ -47,7 +47,7 @@ final class NotificationManagerConsentVisibilityTests: XCTestCase {
 
             let answer = await manager.askToRecord(title: "Browser Meeting", body: "Record this?")
 
-            XCTAssertEqual(answer, .declined, "must never record without a visible prompt")
+            XCTAssertEqual(answer, .unavailable, "must keep menu consent available and never record without a visible prompt")
             XCTAssertTrue(scheduler.added.isEmpty)
             let consent = manager.recentNotifications.first { $0.title == "Browser Meeting" }
             XCTAssertNotNil(consent, "an unpostable prompt must still be visible to /state")

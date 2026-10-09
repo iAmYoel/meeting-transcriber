@@ -53,6 +53,7 @@ let package = Package(
             // not by SPM. Excluding silences "unhandled file" warnings without
             // changing the runtime bundle.
             exclude: ["Info.plist", "Assets.xcassets"],
+            resources: [.copy("Resources/Meeting-Summary.md")],
             // Treat any new compiler warning as a build failure so deprecations
             // and concurrency hints are caught at PR time, not on a future
             // dependency bump. Scoped to our targets only — does not propagate

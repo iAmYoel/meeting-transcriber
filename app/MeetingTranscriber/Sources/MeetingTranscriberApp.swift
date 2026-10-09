@@ -155,7 +155,10 @@ struct MeetingTranscriberApp: App {
             onProcessFiles: processAudioFiles,
             onDismissJob: { id in appState.pipelineQueue.removeJob(id: id) },
             onQuit: quit,
+            watchLoop: appState.watching.watchLoop,
+            summaries: appState.pipeline.summaries,
         )
+        .onAppear { appState.pipeline.summaries.refresh() }
     }
 
     private var menuBarLabel: some View {

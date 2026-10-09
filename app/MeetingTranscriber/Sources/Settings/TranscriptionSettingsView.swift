@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
+import WhisperKit
 
 struct TranscriptionSettingsView: View {
     @Bindable var settings: AppSettings
@@ -10,9 +11,21 @@ struct TranscriptionSettingsView: View {
     /// Set when the user flips live captions on while a first-use Nemotron model
     /// download is pending — defers the actual enable to the consent alert.
     @State private var pendingCaptionEnable = false
+    @State private var fetchedWhisperModels: [String] = []
+    @State private var fetchingWhisperModels = false
+    @State private var whisperModelMessage = ""
+
+    private var whisperModelOptions: [String] {
+        let available = fetchedWhisperModels.isEmpty ? Self.whisperKitModels.map(\.variant) : fetchedWhisperModels
+        return [settings.whisperKitModel] + available.filter { $0 != settings.whisperKitModel }
+    }
+
+    private func whisperModelLabel(_ variant: String) -> String {
+        Self.whisperKitModels.first(where: { $0.variant == variant })?.label ?? variant
+    }
 
     private static let whisperKitModels: [(variant: String, label: String)] = [
-        ("openai_whisper-large-v3-v20240930_turbo", "Large V3 Turbo (recommended)"),
+        ("openai_whisper-large-v3-v20240930_turbo", "Large V3 Turbo"),
         ("openai_whisper-large-v3-v20240930", "Large V3"),
         ("openai_whisper-large-v2", "Large V2"),
         ("openai_whisper-small", "Small"),
@@ -62,10 +75,23 @@ struct TranscriptionSettingsView: View {
     private var whisperKitPickers: some View { // swiftlint:disable:this attributes
         if settings.transcriptionEngine == .whisperKit {
             Picker("Model", selection: $settings.whisperKitModel) {
-                ForEach(Self.whisperKitModels, id: \.variant) { model in
-                    Text(model.label).tag(model.variant)
+                ForEach(whisperModelOptions, id: \.self) { variant in
+                    Text(whisperModelLabel(variant)).tag(variant)
                 }
             }
+
+            Button("Refresh available WhisperKit models") {
+                Task {
+                    fetchingWhisperModels = true
+                    defer { fetchingWhisperModels = false }
+                    do {
+                        fetchedWhisperModels = try await WhisperKit.fetchAvailableModels().sorted()
+                        whisperModelMessage = "Selection is preserved. Full Large V3 and Turbo are distinct models."
+                    } catch { whisperModelMessage = "Model list unavailable. Current selection was kept; no model was substituted." }
+                }
+            }
+            .disabled(fetchingWhisperModels)
+            if !whisperModelMessage.isEmpty { Text(whisperModelMessage).font(.caption) }
 
             Picker("Language", selection: $settings.whisperLanguage) {
                 ForEach(PickerLanguages.whisperKit, id: \.code) { lang in

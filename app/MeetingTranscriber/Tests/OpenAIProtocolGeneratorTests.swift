@@ -262,6 +262,27 @@ final class OpenAIProtocolGeneratorTests: XCTestCase { // swiftlint:disable:this
         }
     }
 
+    func testSummaryStrictCompletionRejectsInterruptedStream() async throws {
+        let sse = "data: {\"choices\":[{\"delta\":{\"content\":\"TITLE: Incomplete\\nTAGS:\\n\\n- Partial note\"}}]}\n"
+        MockURLProtocol.handler = { request in self.mockResponse(request, body: Data(sse.utf8)) }
+        let generator = try OpenAIProtocolGenerator(
+            endpoint: XCTUnwrap(URL(string: "http://localhost:11434/v1")), model: "test", language: "Swedish",
+            session: makeMockSession(), systemPromptOverride: "Canonical prompt", requireCompleteResponse: true,
+        )
+        do {
+            _ = try await generator.generate(transcript: "Raw", title: "Test", diarized: false)
+            XCTFail("An interrupted summary must not be archived as complete")
+        } catch {
+            guard case ProtocolError.connectionFailed = error else { XCTFail("Expected incomplete stream failure"); return }
+        }
+    }
+
+    func testHTTPErrorDescriptionNeverIncludesEchoedMeetingData() {
+        let error = ProtocolError.httpError(400, "private transcript content")
+        XCTAssertFalse(error.localizedDescription.contains("private transcript content"))
+        XCTAssertTrue(error.localizedDescription.contains("400"))
+    }
+
     func testGenerateSucceedsOnStopFinishReason() async throws {
         let sseBody = """
         data: {"choices":[{"delta":{"content":"# Done"}}]}

@@ -273,7 +273,7 @@ final class NotificationManagerTests: XCTestCase {
         // to "don't record" rather than recording without asking.
         let manager = NotificationManager()
         let answer = await manager.askToRecord(title: "Browser meeting", body: "Record?")
-        XCTAssertEqual(answer, .declined)
+        XCTAssertEqual(answer, .unavailable)
     }
 
     func testDefaultNotifierDeniesConsent() async {

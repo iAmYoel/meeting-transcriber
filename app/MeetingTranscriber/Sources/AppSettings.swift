@@ -438,6 +438,35 @@ final class AppSettings {
             && excludeOverlap == DiarizerTuningDefaults.excludeOverlap
     }
 
+    var recordingStartPolicy: RecordingStartPolicy {
+        didSet { defaults.set(recordingStartPolicy.rawValue, forKey: "recordingStartPolicy") }
+    }
+
+    var summaryExecutionMode: SummaryExecutionMode {
+        didSet { defaults.set(summaryExecutionMode.rawValue, forKey: "summaryExecutionMode") }
+    }
+
+    var vaultBookmark: Data? {
+        didSet { defaults.set(vaultBookmark, forKey: "vaultBookmark") }
+    }
+
+    var calendarEnrichmentEnabled: Bool {
+        didSet { defaults.set(calendarEnrichmentEnabled, forKey: "calendarEnrichmentEnabled") }
+    }
+
+    var selectedCalendarIDs: [String] {
+        didSet { defaults.set(selectedCalendarIDs, forKey: "selectedCalendarIDs") }
+    }
+
+    var transcriptRetentionDays: Int {
+        didSet { defaults.set(transcriptRetentionDays, forKey: "transcriptRetentionDays") }
+    }
+
+    /// Explicit consent is bound to the exact endpoint, so changing servers requires a new decision.
+    var approvedRemoteSummaryEndpoint: String {
+        didSet { defaults.set(approvedRemoteSummaryEndpoint, forKey: "approvedRemoteSummaryEndpoint") }
+    }
+
     // MARK: - Protocol Generation
 
     var protocolProvider: ProtocolProvider {
@@ -625,15 +654,24 @@ final class AppSettings {
         (clusterThreshold, warmStartFa, warmStartFb, minSegmentDurationSeconds, excludeOverlap) =
             (t.clusterThreshold, t.warmStartFa, t.warmStartFb, t.minSegmentDuration, t.excludeOverlap)
 
+        recordingStartPolicy = defaults.string(forKey: "recordingStartPolicy")
+            .flatMap(RecordingStartPolicy.init(rawValue:)) ?? .ask
+        summaryExecutionMode = defaults.string(forKey: "summaryExecutionMode")
+            .flatMap(SummaryExecutionMode.init(rawValue:)) ?? .manual
+        vaultBookmark = defaults.data(forKey: "vaultBookmark")
+        calendarEnrichmentEnabled = defaults.bool(forKey: "calendarEnrichmentEnabled")
+        selectedCalendarIDs = defaults.stringArray(forKey: "selectedCalendarIDs") ?? []
+        transcriptRetentionDays = defaults.object(forKey: "transcriptRetentionDays") as? Int ?? 180
+        approvedRemoteSummaryEndpoint = defaults.string(forKey: "approvedRemoteSummaryEndpoint") ?? ""
         let storedProvider = defaults.string(forKey: "protocolProvider")
             .flatMap(ProtocolProvider.init(rawValue:))
         #if APPSTORE
             protocolProvider = storedProvider ?? .openAICompatible
         #else
-            protocolProvider = storedProvider ?? .claudeCLI
+            protocolProvider = storedProvider ?? .openAICompatible
             claudeBin = defaults.object(forKey: "claudeBin") as? String ?? "claude"
         #endif
-        protocolLanguage = defaults.string(forKey: "protocolLanguage") ?? "German"
+        protocolLanguage = defaults.string(forKey: "protocolLanguage") ?? "Swedish"
         includeFullTranscriptInProtocol = defaults.object(forKey: "includeFullTranscriptInProtocol") as? Bool ?? true
         saveRawTranscriptSeparately = defaults.object(forKey: "saveRawTranscriptSeparately") as? Bool ?? true
 

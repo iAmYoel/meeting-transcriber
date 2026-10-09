@@ -72,6 +72,13 @@ GIT_HASH=$(git -C "$TRANSCRIBER_ROOT" rev-parse --short HEAD 2>/dev/null || echo
 
 cp "$BUILD_BINARY" "$APP_BINARY"
 
+# Keep SwiftPM resources with the assembled app so Bundle.module works after relocation.
+mkdir -p "$APP_BUNDLE/Contents/Resources"
+for resource_bundle in "$SPM_DIR/.build/release"/*.bundle; do
+    [ -d "$resource_bundle" ] || continue
+    cp -R "$resource_bundle" "$APP_BUNDLE/Contents/Resources/"
+done
+
 # Licences for the third-party code and weights this bundle redistributes. The
 # dev app is not distributed, but scripts/e2e-app.sh deploys it, so keeping it
 # identical to a release bundle is what makes an e2e run evidence about the

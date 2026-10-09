@@ -19,7 +19,7 @@ struct GeneralSettingsView: View {
     private var browserConsentReadiness: BrowserConsentReadiness? {
         guard let notificationVisibility else { return nil }
         return BrowserConsentReadiness.evaluate(
-            browserMeetingsEnabled: settings.watchBrowserMeetings,
+            browserMeetingsEnabled: settings.watchBrowserMeetings || settings.recordingStartPolicy == .ask,
             visibility: notificationVisibility,
         )
     }
@@ -28,6 +28,14 @@ struct GeneralSettingsView: View {
         // swiftlint:disable:next closure_body_length
         Form {
             Section("Mode") {
+                Picker("When a meeting is detected", selection: $settings.recordingStartPolicy) {
+                    ForEach(RecordingStartPolicy.allCases, id: \.self) { policy in
+                        Text(policy.label).tag(policy)
+                    }
+                }
+                Text("Ask mode records only after you choose Record. Use the menu bar if notifications are unavailable.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Toggle("Record-only mode", isOn: $settings.recordOnly)
                     .accessibilityIdentifier(A11yID.recordOnlyToggle)
                 if settings.recordOnly {
@@ -58,6 +66,8 @@ struct GeneralSettingsView: View {
                 browserConsentWarning
                 consentDenyList
             }
+
+            CalendarSettingsSection(settings: settings)
 
             Section("Detection") {
                 HStack {
@@ -220,9 +230,11 @@ struct GeneralSettingsView: View {
            let warning = readiness.warning {
             Label {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(headline)
+                    Text(settings.recordingStartPolicy == .ask ? "Recording consent needs attention." : headline)
                         .font(.callout.weight(.semibold))
-                    Text(warning)
+                    Text(settings.recordingStartPolicy == .ask
+                        ? "Detected meetings wait for your decision. Enable visible notifications or choose Record/Ignore in the menu bar."
+                        : warning)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier(A11yID.browserConsentWarning)

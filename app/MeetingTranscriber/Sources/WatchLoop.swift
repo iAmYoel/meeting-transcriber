@@ -87,6 +87,10 @@ class WatchLoop {
     /// the first one waits. Internal (not `private(set)`) because
     /// `WatchLoop+Consent.swift` owns the transitions.
     var pendingConsentApp: String?
+    var consentMeeting: DetectedMeeting?
+    var consentPromptID: UUID?
+    var ignoredConsentMeetings: [String: DetectedMeeting] = [:]
+    let recordingStartPolicy: () -> RecordingStartPolicy
 
     /// A meeting the user approved, waiting for the loop to pick it up.
     /// Recordings start in the loop and nowhere else, so an answer arriving
@@ -100,6 +104,8 @@ class WatchLoop {
     /// what an answer (or the lack of one) means.
     func clearConsentState() {
         pendingConsentApp = nil
+        consentMeeting = nil
+        consentPromptID = nil
         approvedConsentMeeting = nil
         consentTask = nil
     }
@@ -129,6 +135,7 @@ class WatchLoop {
             try await Task.sleep(for: .seconds(interval))
         },
         pidAliveCheck: @escaping (pid_t) -> Bool = { kill($0, 0) == 0 },
+        recordingStartPolicy: @escaping () -> RecordingStartPolicy = { .automatic },
         consentPolicy: BrowserConsentPolicy = BrowserConsentPolicy(),
         denyListStore: any ConsentDenyListStoring = InMemoryConsentDenyListStore(),
     ) {
@@ -147,6 +154,7 @@ class WatchLoop {
         self.nowProvider = nowProvider
         self.sleepProvider = sleepProvider
         self.pidAliveCheck = pidAliveCheck
+        self.recordingStartPolicy = recordingStartPolicy
         self.consentPolicy = consentPolicy
         self.denyListStore = denyListStore
     }
@@ -301,16 +309,18 @@ class WatchLoop {
 
     private func watchLoop() async {
         while !Task.isCancelled {
+            refreshConsentEpisodeState()
             // A prompt answered since the last poll comes first: the answer
             // arrives out of band, but recordings only ever start here.
             // Re-checked because the answer may have landed while another
             // meeting was recording, which blocks this loop for its duration —
             // by now the approved call can be long over.
-            if let approved = takeApprovedConsentMeeting(), detector.isMeetingActive(approved) {
+            if let approved = takeApprovedConsentMeeting(),
+               recordingStartPolicy() != .manualOnly, detector.isMeetingActive(approved) {
                 if await runMeeting(approved) { return }
             } else if let meeting = detector.checkOnce() {
-                // Browser meetings (issue #503) ask before recording; native
-                // meetings skip this (flag false). See WatchLoop+Consent.swift.
+                // The selected policy gates native meetings; browsers always require
+                // consent. Manual-only suppresses detection-triggered starts.
                 // Asking does NOT block this loop — that is the whole point:
                 // an unanswered prompt used to stop `checkOnce()` from running
                 // for a full minute, so a Teams or Zoom call starting in that

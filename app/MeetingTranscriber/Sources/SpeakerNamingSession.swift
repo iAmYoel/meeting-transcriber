@@ -33,6 +33,7 @@ protocol SpeakerNamingSessionDelegate: AnyObject {
         embeddings: [String: [Float]], speakingTimes: [String: TimeInterval],
     )
     /// Run the LLM protocol generator over a transcript (a queue pipeline stage).
+    var hasCustomMeetingOutput: Bool { get }
     func generateProtocol(jobID: UUID, transcript: String, title: String, protocolsDir: URL) async
     /// Diarize app + mic tracks separately with the shared single-track fallback
     /// (app-only on mic failure, mic-only on app failure; a queue pipeline stage,
@@ -70,6 +71,12 @@ extension SpeakerNamingSessionDelegate {
 /// observation follows through the stored property into this nested
 /// `@Observable` (the queue exposes thin forwarders for the direct-dict reads
 /// at `PipelineController` / `AppState+RPC`).
+extension SpeakerNamingSessionDelegate {
+    var hasCustomMeetingOutput: Bool {
+        false
+    }
+}
+
 @MainActor
 @Observable
 final class SpeakerNamingSession {
@@ -214,7 +221,7 @@ final class SpeakerNamingSession {
         // nil. Without this, the Task path below fizzles silently
         // (generateProtocol guards on factory()) and the job sits in
         // .speakerNamingPending forever.
-        let canGenerateProtocol = (protocolGeneratorFactory?() != nil)
+        let canGenerateProtocol = (delegate?.hasCustomMeetingOutput == true || protocolGeneratorFactory?() != nil)
             && delegate?.job(withID: jobID)?.transcriptPath != nil
 
         removeNamingData(jobID: jobID, slug: slug)

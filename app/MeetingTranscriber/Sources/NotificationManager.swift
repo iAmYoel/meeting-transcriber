@@ -281,7 +281,11 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate, App
             recentNotificationsLog.record(title: title, body: body, posted: deliverable)
         #endif
 
-        guard deliverable else { return .declined }
+        guard deliverable else { return .unavailable }
+        let readiness = await BrowserConsentReadiness.evaluate(
+            browserMeetingsEnabled: true, visibility: notificationVisibility(),
+        )
+        guard readiness == .ready || readiness == .timeSensitiveOff else { return .unavailable }
         let id = UUID().uuidString
         let answer = await consentCoordinator.awaitDecision(id: id) { [self] in
             postConsentNotification(id: id, title: title, body: body)
