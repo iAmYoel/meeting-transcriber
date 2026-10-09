@@ -88,6 +88,13 @@ fi
 
 cp "$SPM_DIR/.build/release/MeetingTranscriber" "$MACOS_DIR/MeetingTranscriber"
 
+# Keep SwiftPM resources with the assembled app so Bundle.module works after relocation.
+mkdir -p "$RESOURCES"
+for resource_bundle in "$SPM_DIR/.build/release"/*.bundle; do
+    [ -d "$resource_bundle" ] || continue
+    cp -R "$resource_bundle" "$RESOURCES/"
+done
+
 # ── Step 2: Assemble app bundle ──────────────────────────────────────────────
 
 echo ""
