@@ -77,11 +77,21 @@ struct OutputSettingsView: View {
             }
             .accessibilityIdentifier(A11yID.outputFolderSection)
 
-            Section("Protocol Generation") {
+            ObsidianSettingsSection(settings: settings)
+                .recordOnlyDisabled(settings.recordOnly)
+
+            Section("Model provider") {
                 Toggle("Include full transcript in protocol", isOn: $settings.includeFullTranscriptInProtocol)
                     .accessibilityIdentifier(A11yID.includeFullTranscriptToggle)
+                    .disabled(settings.vaultBookmark != nil)
                 Toggle("Save raw transcript separately", isOn: $settings.saveRawTranscriptSeparately)
                     .accessibilityIdentifier(A11yID.saveRawTranscriptToggle)
+                    .disabled(settings.vaultBookmark != nil)
+
+                if settings.vaultBookmark != nil {
+                    Text("Obsidian notes use the external vault prompt and keep raw transcripts separately. Set retention above.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
 
                 Picker("LLM Provider", selection: $settings.protocolProvider) {
                     ForEach(ProtocolProvider.allCases, id: \.self) { provider in
@@ -91,13 +101,18 @@ struct OutputSettingsView: View {
 
                 providerConfigView
 
-                Picker("Protocol Language", selection: $settings.protocolLanguage) {
-                    ForEach(AppSettings.protocolLanguages, id: \.self) { lang in
-                        Text(lang).tag(lang)
+                if settings.vaultBookmark == nil {
+                    Picker("Protocol Language", selection: $settings.protocolLanguage) {
+                        ForEach(AppSettings.protocolLanguages, id: \.self) { lang in
+                            Text(lang).tag(lang)
+                        }
                     }
+                } else {
+                    Text("Meeting-note language: Swedish")
+                        .foregroundStyle(.secondary)
                 }
 
-                promptControls
+                if settings.vaultBookmark == nil { promptControls }
             }
             .accessibilityIdentifier(A11yID.protocolSection)
             .recordOnlyDisabled(settings.recordOnly)
@@ -285,7 +300,7 @@ struct OutputSettingsView: View {
             case let .success(models):
                 availableModels = models
                 if !models.isEmpty {
-                    if !models.contains(settings.openAIModel) {
+                    if settings.openAIModel.isEmpty {
                         settings.openAIModel = models[0]
                     }
                     connectionTestResult = .success("Connected (\(models.count) models)")

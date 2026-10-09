@@ -33,6 +33,8 @@ struct OpenAIProtocolGenerator: ProtocolGenerating {
     /// `protocolTruncated`. The old name never had to account for that, since the
     /// models that accept it emit no reasoning tokens.
     let maxOutputTokens: Int
+    let requireCompleteResponse: Bool
+    let systemPromptOverride: String?
     let session: URLSession
 
     init(
@@ -44,6 +46,8 @@ struct OpenAIProtocolGenerator: ProtocolGenerating {
         maxTotalSeconds: TimeInterval = 1800,
         maxOutputTokens: Int = 16000,
         session: URLSession = .shared,
+        systemPromptOverride: String? = nil,
+        requireCompleteResponse: Bool = false,
     ) {
         self.endpoint = endpoint
         self.model = model
@@ -53,6 +57,8 @@ struct OpenAIProtocolGenerator: ProtocolGenerating {
         self.maxTotalSeconds = maxTotalSeconds
         self.maxOutputTokens = maxOutputTokens
         self.session = session
+        self.systemPromptOverride = systemPromptOverride
+        self.requireCompleteResponse = requireCompleteResponse
     }
 
     func generate(
@@ -61,7 +67,7 @@ struct OpenAIProtocolGenerator: ProtocolGenerating {
         diarized: Bool,
         meetingStartTime: Date?,
     ) async throws -> String {
-        let systemPrompt = ProtocolGenerator.buildSystemPrompt(
+        let systemPrompt = systemPromptOverride ?? ProtocolGenerator.buildSystemPrompt(
             diarized: diarized,
             language: language,
             meetingStartTime: meetingStartTime,
@@ -134,9 +140,16 @@ struct OpenAIProtocolGenerator: ProtocolGenerating {
         let model = self.model
         let deadline = maxTotalSeconds
         let finalRequest = request
+        let requireCompleteResponse = self.requireCompleteResponse
         return try await withThrowingTaskGroup(of: String.self) { group in
             group.addTask {
-                try await Self.streamProtocol(session: session, request: finalRequest, requestURL: requestURL, model: model)
+                try await Self.streamProtocol(
+                    session: session,
+                    request: finalRequest,
+                    requestURL: requestURL,
+                    model: model,
+                    requireCompleteResponse: requireCompleteResponse,
+                )
             }
             group.addTask {
                 try await Task.sleep(nanoseconds: UInt64(deadline * 1_000_000_000))
@@ -153,7 +166,7 @@ struct OpenAIProtocolGenerator: ProtocolGenerating {
     /// Open the streaming request and accumulate the SSE content deltas. Static
     /// so the deadline race captures only Sendable locals, not `self`.
     private static func streamProtocol(
-        session: URLSession, request: URLRequest, requestURL: URL, model: String,
+        session: URLSession, request: URLRequest, requestURL: URL, model: String, requireCompleteResponse: Bool,
     ) async throws -> String {
         let (bytes, response): (URLSession.AsyncBytes, URLResponse)
         do {
@@ -178,7 +191,7 @@ struct OpenAIProtocolGenerator: ProtocolGenerating {
                 if errorBody.count > 500 { break }
             }
             logger.error(
-                "openai_http_error status=\(httpResponse.statusCode, privacy: .public) endpoint=\(requestURL.absoluteString, privacy: .public) body=\(errorBody, privacy: .public)",
+                "openai_http_error status=\(httpResponse.statusCode, privacy: .public) endpoint=\(requestURL.absoluteString, privacy: .public) body=[redacted]",
             )
             throw ProtocolError.httpError(httpResponse.statusCode, errorBody)
         }
@@ -199,6 +212,9 @@ struct OpenAIProtocolGenerator: ProtocolGenerating {
             throw ProtocolError.protocolTruncated
         }
 
+        guard !requireCompleteResponse || finishReason == "stop" else {
+            throw ProtocolError.connectionFailed("The model stream ended without completing the summary")
+        }
         let result = parts.joined().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !result.isEmpty else {
             throw ProtocolError.emptyProtocol

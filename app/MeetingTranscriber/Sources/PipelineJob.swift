@@ -121,6 +121,8 @@ struct PipelineJob: Identifiable, Codable {
     /// The echo detector's verdict, once the transcription stage has run it.
     /// Nil for single-source jobs and whenever no verdict was possible.
     var echo: EchoDetectionDTO?
+    var summaryExecutionMode: SummaryExecutionMode?
+    var calendarMetadata: CalendarMeetingMetadata?
     var transcriptPath: URL?
     var protocolPath: URL?
     var namingSlug: String?

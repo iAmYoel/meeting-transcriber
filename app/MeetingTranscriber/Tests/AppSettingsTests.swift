@@ -333,11 +333,7 @@ final class AppSettingsTests: XCTestCase {
     // MARK: - Protocol Provider
 
     func testProtocolProviderDefault() {
-        #if APPSTORE
-            XCTAssertEqual(settings.protocolProvider, .openAICompatible)
-        #else
-            XCTAssertEqual(settings.protocolProvider, .claudeCLI)
-        #endif
+        XCTAssertEqual(settings.protocolProvider, .openAICompatible)
     }
 
     func testProtocolProviderPersistence() {

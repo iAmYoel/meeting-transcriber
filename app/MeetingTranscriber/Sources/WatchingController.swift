@@ -254,6 +254,7 @@ final class WatchingController {
                         .production(parent: pipeline.outputDirectory.resolve())
                     },
                     notifier: notifier,
+                    recordingStartPolicy: { [settings] in settings.recordingStartPolicy },
                     denyListStore: ConsentDenyListStore(settings: settings),
                 )
 

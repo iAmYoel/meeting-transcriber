@@ -65,6 +65,13 @@ class PipelineQueue {
     /// not supported, `lateDiarization` falls back to `diarizationFactory()`
     /// (current global setting). Production wires both via `AppState`.
     let diarizationFactoryWithMode: ((DiarizerMode) -> any DiarizationProvider)?
+    var summaryModeProvider: (() -> SummaryExecutionMode)?
+    var meetingOutputHandler: ((PipelineJob, String) async throws -> MeetingOutputReceipt)?
+    var calendarMetadataProvider: ((PipelineJob) -> CalendarMeetingMetadata?)?
+    var hasCustomMeetingOutput: Bool {
+        meetingOutputHandler != nil
+    }
+
     let protocolGeneratorFactory: (() -> (any ProtocolGenerating)?)?
     let outputDir: URL?
     /// Opens and closes security-scoped access on `outputDir`. Injectable so a
@@ -510,6 +517,7 @@ class PipelineQueue {
     /// same admission rule as regular enqueueing so a later settings change
     /// cannot change output handling for an already recovered recording.
     func stampTranscriptOutputOptions(on job: inout PipelineJob) {
+        if job.summaryExecutionMode == nil { job.summaryExecutionMode = summaryModeProvider?() }
         let outputOptions = transcriptOutputOptionsProvider()
         if job.includeFullTranscriptInProtocol == nil {
             job.includeFullTranscriptInProtocol = outputOptions.includeFullTranscriptInProtocol
@@ -698,6 +706,7 @@ class PipelineQueue {
     /// transcript intact so users can recover the meeting content instead of
     /// losing it with no generated minutes to show for it.
     private func removeRawTranscriptArtifactsIfSafe(for index: Int) {
+        guard meetingOutputHandler == nil else { return }
         guard !transcriptOutputOptions(forJobID: jobs[index].id).saveRawTranscriptSeparately else { return }
         guard jobs[index].protocolPath != nil else {
             if jobs[index].transcriptPath != nil {

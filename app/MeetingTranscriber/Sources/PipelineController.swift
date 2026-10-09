@@ -29,6 +29,7 @@ final class PipelineController {
     /// by `installQueueForTesting`.
     private(set) var queue: PipelineQueue
 
+    let summaries: MeetingSummaryController
     private let settings: AppSettings
     private let notifier: any AppNotifying
 
@@ -96,6 +97,7 @@ final class PipelineController {
         terminalJobStore: TerminalJobStore? = nil,
         queueEnvironment: QueueEnvironment = .production,
     ) {
+        self.summaries = MeetingSummaryController(settings: settings, notifier: notifier)
         self.settings = settings
         self.notifier = notifier
         self.queueEnvironment = queueEnvironment
@@ -272,7 +274,7 @@ final class PipelineController {
     /// queue built and dropped takes and releases one.
     func makeQueue() -> PipelineQueue? {
         guard let engine = engineProvider?() else { return nil }
-        return PipelineQueue(
+        let result = PipelineQueue(
             engine: engine,
             diarizationFactory: { [self] in makeFluidDiarizer(mode: settings.diarizerMode) },
             diarizationFactoryWithMode: { [self] mode in makeFluidDiarizer(mode: mode) },
@@ -306,6 +308,12 @@ final class PipelineController {
             terminalJobStore: terminalJobStore,
             securityScope: queueEnvironment.securityScope,
         )
+        result.meetingOutputHandler = { [summaries] job, transcript in
+            try await summaries.receive(job: job, transcript: transcript)
+        }
+        result.calendarMetadataProvider = { [summaries] in summaries.metadata(for: $0) }
+        result.summaryModeProvider = { [settings] in settings.summaryExecutionMode }
+        return result
     }
 
     /// One-stop FluidDiarizer instantiation. Captures the current tuning fields

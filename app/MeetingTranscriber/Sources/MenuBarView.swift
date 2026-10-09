@@ -27,6 +27,9 @@ struct MenuBarView: View {
     let onDismissJob: (UUID) -> Void
     let onQuit: () -> Void
 
+    var watchLoop: WatchLoop?
+    var summaries: MeetingSummaryController?
+
     private var state: TranscriberState {
         status?.state ?? .idle
     }
@@ -61,6 +64,8 @@ struct MenuBarView: View {
         Divider()
 
         watchControls
+        consentControls
+        summaryControls
         processingQueue
 
         Divider()
@@ -172,6 +177,21 @@ struct MenuBarView: View {
             Label("Process Audio/Video Files...", systemImage: "doc.badge.plus")
         }
         .keyboardShortcut("p")
+    }
+
+    @ViewBuilder private var consentControls: some View {
+        if let loop = watchLoop, let app = loop.pendingConsentApp {
+            Divider()
+            Text("Record meeting in \(app)?")
+            Button("Record") { loop.answerConsentFromMenu(granted: true) }
+            Button("Ignore") { loop.answerConsentFromMenu(granted: false) }
+        }
+    }
+
+    @ViewBuilder private var summaryControls: some View {
+        if let summaries {
+            PendingSummariesMenu(controller: summaries)
+        }
     }
 
     @ViewBuilder private var processingQueue: some View {
